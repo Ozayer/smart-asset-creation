@@ -336,7 +336,7 @@ public class HeavyMachineryDB {
         addIncompleteEquipment("CAT0320192", "CATERPILLAR", "320", null, null, null, null);
         addIncompleteEquipment("CAT0336FL193", "CATERPILLAR", "336F L", null, null, null, null);
         addIncompleteEquipment("CAT0430D194", "CATERPILLAR", "430D", null, null, null, null);
-        addIncompleteEquipment("CAT0TL1055195", "CATERPILLAR", "TL1055", null, null, null, null);}
+        addIncompleteEquipment("CAT0TL1055195", "CATERPILLAR", "TL1055", null, null, null, null);
     }
     
     private void addEquipment(String vin, String make, String model, String year, 
