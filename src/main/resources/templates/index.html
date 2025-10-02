@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>VIN Decoder</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; background: #f5f5f5; }
+        .form-group { margin: 15px 0; }
+        .form-row { display: flex; gap: 15px; }
+        .flex-1 { flex: 1; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #333; font-size: 14px; }
+        .form-input, .form-select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: white; }
+        .form-input:disabled, .form-select:disabled { background: #f8f9fa; color: #6c757d; cursor: not-allowed; }
+        .form-select { appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="%23666" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>'); background-repeat: no-repeat; background-position: right 12px center; background-size: 12px; }
+        input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .error { color: red; margin: 10px 0; }
+        .success { color: green; margin: 10px 0; }
+        .results { background: white; padding: 30px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .comprehensive-form { max-width: none; }
+        .suggestions { margin-top: 8px; }
+        .suggestion-badge { display: inline-block; padding: 4px 8px; margin: 2px; border-radius: 4px; cursor: pointer; font-size: 12px; color: white; }
+        .model-badge { background: #007bff; }
+        .year-badge { background: #28a745; }
+        .type-badge { background: #6f42c1; }
+        .suggestion-badge:hover { opacity: 0.8; }
+        .add-usage-btn { background: none; border: 1px dashed #ddd; color: #666; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .add-usage-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+        .save-btn { background: #28a745; padding: 12px 24px; font-size: 16px; font-weight: 500; }
+        .save-btn:hover { background: #218838; }
+        
+        /* Chat Assistant Styles */
+        .chat-button { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; background: #007bff; color: white; border: none; border-radius: 50%; font-size: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,123,255,0.3); z-index: 1000; }
+        .chat-button:hover { background: #0056b3; transform: scale(1.1); }
+        .chat-window { position: fixed; bottom: 90px; right: 20px; width: 350px; height: 500px; background: white; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); z-index: 1000; display: none; }
+        .chat-header { background: #007bff; color: white; padding: 15px; border-radius: 12px 12px 0 0; font-weight: bold; }
+        .chat-messages { height: 350px; overflow-y: auto; padding: 15px; }
+        .chat-input { padding: 15px; border-top: 1px solid #eee; }
+        .chat-input input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .message { margin: 8px 0; padding: 8px 12px; border-radius: 8px; max-width: 80%; }
+        .bot-message { background: #e3f2fd; align-self: flex-start; }
+        .user-message { background: #e8f5e8; align-self: flex-end; margin-left: auto; }
+        .chat-options { margin: 8px 0; }
+        .chat-option { background: #007bff; color: white; border: none; padding: 6px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .chat-option:hover { background: #0056b3; }
+        .chat-suggestions { margin: 8px 0; }
+        .chat-suggestion { background: #ff9800; color: white; border: none; padding: 4px 8px; margin: 1px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <h1>Vehicle Asset Management</h1>
+    
+    <form th:action="@{/decode}" method="post">
+        <div class="form-group">
+            <label for="vin">Enter VIN Number:</label>
+            <input type="text" id="vin" name="vin" th:value="${vehicleData.vin}" placeholder="1HGBH41JXMN109186">
+        </div>
+        <button type="submit">Decode VIN</button>
+    </form>
+    
+    <div style="margin: 30px 0; padding: 20px; border-top: 2px solid #ddd;">
+        <h3>Or Upload VIN Image</h3>
+        <form th:action="@{/upload}" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="image">Upload Image with VIN:</label>
+                <input type="file" id="image" name="image" accept="image/*" required>
+            </div>
+            <button type="submit">Extract VIN from Image</button>
+        </form>
+    </div>
+
+    <div th:if="${error}" class="error" th:text="${error}"></div>
+    <div th:if="${saved}" class="success">Vehicle data saved successfully!</div>
+
+    <div th:if="${vehicleData != null and (vehicleData.vin != null and !vehicleData.vin.isEmpty() or vehicleData.make != null and !vehicleData.make.isEmpty() or vehicleData.model != null and !vehicleData.model.isEmpty() or vehicleData.year != null and !vehicleData.year.isEmpty())}" class="results">
+        <h3>Vehicle Asset Information</h3>
+        <form th:action="@{/save}" method="post" th:object="${vehicleData}" class="comprehensive-form">
+            
+            <!-- Year -->
+            <div class="form-group">
+                <label for="year">Year (Optional):</label>
+                <input type="text" id="year" th:field="*{year}" class="form-input" placeholder="Enter year">
+                <div th:if="${suggestions != null and suggestions.containsKey('year')}" class="suggestions">
+                    <small>💡 Suggested Years:</small><br>
+                    <span th:each="year, iterStat : ${suggestions.get('year')}" 
+                          th:text="${year}" 
+                          class="suggestion-badge year-badge"
+                          onclick="selectYear(this.textContent)">
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Make -->
+            <div class="form-group">
+                <label for="make">Make:</label>
+                <select id="make" th:field="*{make}" class="form-select">
+                    <option value="" th:selected="${vehicleData.make == null or vehicleData.make.isEmpty()}">Select Make</option>
+                    <option th:value="${vehicleData.make}" th:text="${vehicleData.make}" th:selected="true" th:if="${vehicleData.make != null and !vehicleData.make.isEmpty()}"></option>
+                </select>
+            </div>
+            
+            <!-- Model -->
+            <div class="form-group">
+                <label for="model">Model:</label>
+                <select id="model" th:field="*{model}" class="form-select">
+                    <option value="" th:selected="${vehicleData.model == null or vehicleData.model.isEmpty()}">Select Model</option>
+                    <option th:value="${vehicleData.model}" th:text="${vehicleData.model}" th:selected="true" th:if="${vehicleData.model != null and !vehicleData.model.isEmpty()}"></option>
+                </select>
+                <div th:if="${suggestions != null and suggestions.containsKey('model')}" class="suggestions">
+                    <small>💡 Suggested Models:</small><br>
+                    <span th:each="model, iterStat : ${suggestions.get('model')}" 
+                          th:text="${model}" 
+                          class="suggestion-badge model-badge"
+                          onclick="selectModel(this.textContent)">
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Category -->
+            <div class="form-group">
+                <label for="category">Category:</label>
+                <select id="category" class="form-select" disabled>
+                    <option>Parts</option>
+                </select>
+            </div>
+            
+            <!-- Type -->
+            <div class="form-group">
+                <label for="vehicleType">Type:</label>
+                <select id="vehicleType" th:field="*{vehicleType}" class="form-select">
+                    <option value="" th:selected="${vehicleData.vehicleType == null or vehicleData.vehicleType.isEmpty()}">Select Type</option>
+                    <option th:value="${vehicleData.vehicleType}" th:text="${vehicleData.vehicleType}" th:selected="true" th:if="${vehicleData.vehicleType != null and !vehicleData.vehicleType.isEmpty()}"></option>
+                </select>
+                <div th:if="${suggestions != null and suggestions.containsKey('vehicleType')}" class="suggestions">
+                    <small>💡 Suggested Types:</small><br>
+                    <span th:each="vehicleType, iterStat : ${suggestions.get('vehicleType')}" 
+                          th:text="${vehicleType}" 
+                          class="suggestion-badge type-badge"
+                          onclick="selectType(this.textContent)">
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Serial Number -->
+            <div class="form-group">
+                <label for="serialNumber">Serial number (optional):</label>
+                <input type="text" id="serialNumber" class="form-input" disabled placeholder="Enter serial number">
+            </div>
+            
+            <!-- VIN Number -->
+            <div class="form-group">
+                <label for="vin">VIN number (optional):</label>
+                <input type="text" id="vin" th:field="*{vin}" class="form-input">
+            </div>
+            
+            <!-- Usage Section -->
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label for="usage">Usage (optional):</label>
+                    <input type="text" id="usage" class="form-input" disabled placeholder="Enter usage">
+                </div>
+                <div class="form-group flex-1">
+                    <label for="unit">Unit:</label>
+                    <select id="unit" class="form-select" disabled>
+                        <option>Miles</option>
+                        <option>Kilometers</option>
+                        <option>Hours</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Add Another Usage -->
+            <div class="form-group">
+                <button type="button" class="add-usage-btn" disabled>+ Add another usage</button>
+            </div>
+            
+            <!-- Seller Reference Number -->
+            <div class="form-group">
+                <label for="sellerRef">Seller reference number (optional):</label>
+                <input type="text" id="sellerRef" class="form-input" disabled placeholder="Enter reference number">
+            </div>
+            
+            <button type="submit" class="save-btn">Save Vehicle Asset</button>
+        </form>
+    </div>
+    <!-- Chat Assistant -->
+    <button class="chat-button" onclick="toggleChat()" id="chatButton">💬</button>
+    
+    <div class="chat-window" id="chatWindow">
+        <div class="chat-header">
+            🚗 Vehicle Assistant
+            <button style="float: right; background: none; border: none; color: white; cursor: pointer;" onclick="toggleChat()">×</button>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input">
+            <input type="text" id="chatInput" placeholder="Type your message..." onkeypress="handleChatKeyPress(event)">
+        </div>
+    </div>
+
+    <script>
+        let chatSessionId = null;
+        let chatCurrentState = 'WELCOME';
+        let chatOpen = false;
+        
+        function toggleChat() {
+            const chatWindow = document.getElementById('chatWindow');
+            chatOpen = !chatOpen;
+            chatWindow.style.display = chatOpen ? 'block' : 'none';
+            
+            if (chatOpen && !chatSessionId) {
+                startChatSession();
+            }
+        }
+        
+        async function startChatSession() {
+            try {
+                const response = await fetch('/api/chat/start', { method: 'POST' });
+                const data = await response.json();
+                chatSessionId = data.data.sessionId;
+                chatCurrentState = data.nextState;
+                displayChatMessage(data.message, 'bot', data.options, data.data);
+            } catch (error) {
+                console.error('Error starting chat:', error);
+            }
+        }
+        
+        async function sendChatMessage(message = null) {
+            const input = document.getElementById('chatInput');
+            const userMessage = message || input.value.trim();
+            
+            if (!userMessage) return;
+            
+            displayChatMessage(userMessage, 'user');
+            input.value = '';
+            
+            try {
+                const response = await fetch('/api/chat/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: chatSessionId,
+                        message: userMessage,
+                        state: chatCurrentState
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('Chat response:', data);
+                chatCurrentState = data.nextState;
+                displayChatMessage(data.message, 'bot', data.options, data.data);
+                
+                // Store completion data for when user clicks the button
+                if (data.data && data.data.completeChat && data.data.finalData) {
+                    console.log('Chat completion data available:', data.data.finalData);
+                    window.chatCompletionData = data.data.finalData;
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                displayChatMessage('Sorry, there was an error. Please try again.', 'bot');
+            }
+        }
+        
+        function displayChatMessage(message, sender, options = [], data = {}) {
+            const container = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            messageDiv.innerHTML = message.replace(/\n/g, '<br>');
+            container.appendChild(messageDiv);
+            
+            if (options.length > 0) {
+                const optionsDiv = document.createElement('div');
+                optionsDiv.className = 'chat-options';
+                options.forEach(option => {
+                    const btn = document.createElement('button');
+                    btn.className = 'chat-option';
+                    btn.textContent = option;
+                    if (option.includes('Complete') && (data.completeChat || data.finalData)) {
+                        btn.onclick = () => {
+                            console.log('Complete button clicked, filling form with:', data.finalData);
+                            fillFormFromChatData(data.finalData);
+                        };
+                    } else {
+                        btn.onclick = () => sendChatMessage(option);
+                    }
+                    optionsDiv.appendChild(btn);
+                });
+                container.appendChild(optionsDiv);
+            }
+            
+            if (data.modelSuggestions) {
+                const suggestionsDiv = document.createElement('div');
+                suggestionsDiv.className = 'chat-suggestions';
+                suggestionsDiv.innerHTML = '<strong style="font-size: 12px;">Models:</strong><br>';
+                data.modelSuggestions.forEach(model => {
+                    const btn = document.createElement('button');
+                    btn.className = 'chat-suggestion';
+                    btn.textContent = model;
+                    btn.onclick = () => sendChatMessage(`Select model: ${model}`);
+                    suggestionsDiv.appendChild(btn);
+                });
+                container.appendChild(suggestionsDiv);
+            }
+            
+            if (data.yearSuggestions) {
+                const suggestionsDiv = document.createElement('div');
+                suggestionsDiv.className = 'chat-suggestions';
+                suggestionsDiv.innerHTML = '<strong style="font-size: 12px;">Years:</strong><br>';
+                data.yearSuggestions.forEach(year => {
+                    const btn = document.createElement('button');
+                    btn.className = 'chat-suggestion';
+                    btn.textContent = year;
+                    btn.onclick = () => sendChatMessage(`Select year: ${year}`);
+                    suggestionsDiv.appendChild(btn);
+                });
+                container.appendChild(suggestionsDiv);
+            }
+            
+            if (data.typeSuggestions) {
+                const suggestionsDiv = document.createElement('div');
+                suggestionsDiv.className = 'chat-suggestions';
+                suggestionsDiv.innerHTML = '<strong style="font-size: 12px;">Types:</strong><br>';
+                data.typeSuggestions.forEach(type => {
+                    const btn = document.createElement('button');
+                    btn.className = 'chat-suggestion';
+                    btn.textContent = type;
+                    btn.onclick = () => sendChatMessage(`Select type: ${type}`);
+                    suggestionsDiv.appendChild(btn);
+                });
+                container.appendChild(suggestionsDiv);
+            }
+            
+            if (data.showFileUpload) {
+                const uploadDiv = document.createElement('div');
+                uploadDiv.innerHTML = `
+                    <input type="file" id="chatFileInput" accept="image/*" style="margin: 10px 0; width: 100%;">
+                    <button onclick="uploadChatImage()" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; width: 100%;">Upload Image</button>
+                `;
+                container.appendChild(uploadDiv);
+            }
+            
+            if (data.completeChat && data.finalData) {
+                console.log('Completion data stored for button click');
+                window.chatCompletionData = data.finalData;
+            }
+            
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+        
+        async function uploadChatImage() {
+            const fileInput = document.getElementById('chatFileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                displayChatMessage('Please select an image file first.', 'bot');
+                return;
+            }
+            
+            displayChatMessage(`Uploading image: ${file.name}`, 'user');
+            displayChatMessage('Processing image with OCR... Please wait.', 'bot');
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            try {
+                const response = await fetch('/api/chat/upload-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.extractedVin) {
+                        displayChatMessage(`✅ Found VIN: ${data.extractedVin}`, 'bot');
+                        sendChatMessage(data.extractedVin);
+                    } else if (data.error) {
+                        displayChatMessage(`❌ ${data.error}`, 'bot');
+                    }
+                } else {
+                    displayChatMessage('Failed to process image. Please try again or enter VIN manually.', 'bot');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                displayChatMessage('Error uploading image. Please try again.', 'bot');
+            }
+        }
+        
+        function fillFormFromChat(vehicleData) {
+            if (vehicleData.vin) document.getElementById('vin').value = vehicleData.vin;
+            if (vehicleData.make) document.getElementById('make').value = vehicleData.make;
+            if (vehicleData.model) document.getElementById('model').value = vehicleData.model;
+            if (vehicleData.year) document.getElementById('year').value = vehicleData.year;
+            if (vehicleData.vehicleType) document.getElementById('vehicleType').value = vehicleData.vehicleType;
+            
+            // Scroll to form and highlight it
+            const resultsDiv = document.querySelector('.results');
+            if (resultsDiv) {
+                resultsDiv.scrollIntoView({ behavior: 'smooth' });
+                resultsDiv.style.border = '2px solid #28a745';
+                setTimeout(() => {
+                    resultsDiv.style.border = '';
+                }, 3000);
+            }
+        }
+        
+        function fillFormFromChatData(vehicleData) {
+            console.log('Filling form with data:', vehicleData);
+            
+            // Create a form and submit it to decode endpoint (handles both VIN and manual data)
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/decode';
+            
+            // Add all available data - endpoint will handle appropriately
+            if (vehicleData.vin) {
+                const vinInput = document.createElement('input');
+                vinInput.type = 'hidden';
+                vinInput.name = 'vin';
+                vinInput.value = vehicleData.vin;
+                form.appendChild(vinInput);
+            }
+            
+            if (vehicleData.make) {
+                const makeInput = document.createElement('input');
+                makeInput.type = 'hidden';
+                makeInput.name = 'make';
+                makeInput.value = vehicleData.make;
+                form.appendChild(makeInput);
+            }
+            
+            if (vehicleData.model) {
+                const modelInput = document.createElement('input');
+                modelInput.type = 'hidden';
+                modelInput.name = 'model';
+                modelInput.value = vehicleData.model;
+                form.appendChild(modelInput);
+            }
+            
+            if (vehicleData.year) {
+                const yearInput = document.createElement('input');
+                yearInput.type = 'hidden';
+                yearInput.name = 'year';
+                yearInput.value = vehicleData.year;
+                form.appendChild(yearInput);
+            }
+            
+            if (vehicleData.vehicleType) {
+                const typeInput = document.createElement('input');
+                typeInput.type = 'hidden';
+                typeInput.name = 'vehicleType';
+                typeInput.value = vehicleData.vehicleType;
+                form.appendChild(typeInput);
+            }
+            
+            console.log('Submitting form with action:', form.action);
+            document.body.appendChild(form);
+            form.submit();
+        }
+        
+        function selectModel(model) {
+            document.getElementById('model').value = model;
+            const select = document.getElementById('model');
+            select.innerHTML = '<option value="' + model + '" selected>' + model + '</option>';
+        }
+        
+        function selectType(type) {
+            document.getElementById('vehicleType').value = type;
+            const select = document.getElementById('vehicleType');
+            select.innerHTML = '<option value="' + type + '" selected>' + type + '</option>';
+        }
+        
+        function selectYear(year) {
+            document.getElementById('year').value = year;
+        }
+    </script>
+</body>
+</html>
