@@ -16,6 +16,16 @@
         .input-area button { padding: 10px 20px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .suggestions { margin: 10px 0; }
         .suggestion-btn { background: #ff9800; color: white; border: none; padding: 6px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        
+        /* Voice Input Styles */
+        .voice-input-container { position: relative; display: flex; align-items: center; }
+        .voice-btn { position: absolute; right: 8px; background: none; border: none; cursor: pointer; padding: 4px; border-radius: 4px; z-index: 10; }
+        .voice-btn:hover { background: #f0f0f0; }
+        .voice-btn.listening { background: #ff4444; color: white; }
+        .voice-btn.listening:hover { background: #cc3333; }
+        .voice-status { font-size: 12px; color: #666; margin-top: 4px; }
+        .voice-status.listening { color: #ff4444; font-weight: bold; }
+        .voice-status.processing { color: #007bff; }
     </style>
 </head>
 <body>
@@ -26,9 +36,15 @@
     </div>
     
     <div class="input-area">
-        <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+        <div class="voice-input-container" style="flex: 1;">
+            <input type="text" id="messageInput" placeholder="Type your message..." onkeypress="handleKeyPress(event)" style="padding-right: 40px; width: 100%;">
+            <button type="button" class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="Voice Input">
+                🎤
+            </button>
+        </div>
         <button onclick="sendMessage()">Send</button>
     </div>
+    <div id="voiceStatus" class="voice-status"></div>
 
     <script>
         let sessionId = null;
@@ -135,8 +151,93 @@
             }
         }
         
+        // Web Speech API Integration
+        let recognition = null;
+        let isListening = false;
+        
+        function initSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                console.log('Speech recognition not supported');
+                return false;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = function() {
+                isListening = true;
+                updateVoiceStatus('Listening...', 'listening');
+                updateVoiceButton(true);
+            };
+            
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                const inputElement = document.getElementById('messageInput');
+                if (inputElement) {
+                    inputElement.value = transcript;
+                    inputElement.focus();
+                    updateVoiceStatus('Voice input completed', 'processing');
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                updateVoiceStatus('Voice input failed. Please try again.', '');
+                updateVoiceButton(false);
+                isListening = false;
+            };
+            
+            recognition.onend = function() {
+                isListening = false;
+                updateVoiceButton(false);
+                setTimeout(() => {
+                    updateVoiceStatus('', '');
+                }, 3000);
+            };
+            
+            return true;
+        }
+        
+        function toggleVoiceInput() {
+            if (!recognition && !initSpeechRecognition()) {
+                alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
+                return;
+            }
+            
+            if (isListening) {
+                recognition.stop();
+                return;
+            }
+            
+            recognition.start();
+        }
+        
+        function updateVoiceStatus(message, className) {
+            const statusElement = document.getElementById('voiceStatus');
+            if (statusElement) {
+                statusElement.textContent = message;
+                statusElement.className = 'voice-status ' + className;
+            }
+        }
+        
+        function updateVoiceButton(listening) {
+            const button = document.getElementById('voiceBtn');
+            if (button) {
+                button.className = listening ? 'voice-btn listening' : 'voice-btn';
+                button.textContent = listening ? '🔴' : '🎤';
+                button.title = listening ? 'Stop Voice Input' : 'Voice Input';
+            }
+        }
+        
         // Start chat when page loads
-        window.onload = startChat;
+        window.onload = function() {
+            startChat();
+            initSpeechRecognition();
+        };
     </script>
 </body>
 </html>

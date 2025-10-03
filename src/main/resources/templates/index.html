@@ -45,6 +45,17 @@
         .chat-option:hover { background: #0056b3; }
         .chat-suggestions { margin: 8px 0; }
         .chat-suggestion { background: #ff9800; color: white; border: none; padding: 4px 8px; margin: 1px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+        
+        /* Voice Input Styles */
+        .voice-input-container { position: relative; display: flex; align-items: center; }
+        .voice-btn { position: absolute; right: 8px; background: none; border: none; cursor: pointer; padding: 4px; border-radius: 4px; z-index: 10; }
+        .voice-btn:hover { background: #f0f0f0; }
+        .voice-btn.listening { background: #ff4444; color: white; }
+        .voice-btn.listening:hover { background: #cc3333; }
+        .voice-status { font-size: 12px; color: #666; margin-top: 4px; }
+        .voice-status.listening { color: #ff4444; font-weight: bold; }
+        .voice-status.processing { color: #007bff; }
+        .chat-input { position: relative; }
     </style>
 </head>
 <body>
@@ -53,7 +64,13 @@
     <form th:action="@{/decode}" method="post">
         <div class="form-group">
             <label for="vin">Enter VIN Number:</label>
-            <input type="text" id="vin" name="vin" th:value="${vehicleData.vin}" placeholder="1HGBH41JXMN109186">
+            <div class="voice-input-container">
+                <input type="text" id="vin" name="vin" th:value="${vehicleData.vin}" placeholder="1HGBH41JXMN109186" style="padding-right: 40px;">
+                <button type="button" class="voice-btn" id="vinVoiceBtn" onclick="toggleVoiceInput('vin')" title="Voice Input">
+                    🎤
+                </button>
+            </div>
+            <div id="vinVoiceStatus" class="voice-status"></div>
         </div>
         <button type="submit">Decode VIN</button>
     </form>
@@ -193,7 +210,13 @@
         </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="chat-input">
-            <input type="text" id="chatInput" placeholder="Type your message..." onkeypress="handleChatKeyPress(event)">
+            <div class="voice-input-container">
+                <input type="text" id="chatInput" placeholder="Type your message..." onkeypress="handleChatKeyPress(event)" style="padding-right: 40px;">
+                <button type="button" class="voice-btn" id="chatVoiceBtn" onclick="toggleVoiceInput('chatInput')" title="Voice Input">
+                    🎤
+                </button>
+            </div>
+            <div id="chatInputVoiceStatus" class="voice-status"></div>
         </div>
     </div>
 
@@ -477,6 +500,105 @@
         function selectYear(year) {
             document.getElementById('year').value = year;
         }
+        
+        // Web Speech API Integration
+        let recognition = null;
+        let isListening = false;
+        let currentInputId = null;
+        
+        function initSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                console.log('Speech recognition not supported');
+                return false;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = function() {
+                isListening = true;
+                updateVoiceStatus('Listening...', 'listening');
+                updateVoiceButton(true);
+            };
+            
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                const inputElement = document.getElementById(currentInputId);
+                if (inputElement) {
+                    inputElement.value = transcript;
+                    inputElement.focus();
+                    updateVoiceStatus('Voice input completed', 'processing');
+                    
+                    // Auto-submit VIN if it looks like a valid VIN
+                    if (currentInputId === 'vin' && transcript.length >= 10) {
+                        setTimeout(() => {
+                            const form = inputElement.closest('form');
+                            if (form) form.submit();
+                        }, 1000);
+                    }
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                updateVoiceStatus('Voice input failed. Please try again.', '');
+                updateVoiceButton(false);
+                isListening = false;
+            };
+            
+            recognition.onend = function() {
+                isListening = false;
+                updateVoiceButton(false);
+                setTimeout(() => {
+                    updateVoiceStatus('', '');
+                }, 3000);
+            };
+            
+            return true;
+        }
+        
+        function toggleVoiceInput(inputId) {
+            if (!recognition && !initSpeechRecognition()) {
+                alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
+                return;
+            }
+            
+            if (isListening) {
+                recognition.stop();
+                return;
+            }
+            
+            currentInputId = inputId;
+            recognition.start();
+        }
+        
+        function updateVoiceStatus(message, className) {
+            const statusId = currentInputId === 'vin' ? 'vinVoiceStatus' : 'chatInputVoiceStatus';
+            const statusElement = document.getElementById(statusId);
+            if (statusElement) {
+                statusElement.textContent = message;
+                statusElement.className = 'voice-status ' + className;
+            }
+        }
+        
+        function updateVoiceButton(listening) {
+            const buttonId = currentInputId === 'vin' ? 'vinVoiceBtn' : 'chatVoiceBtn';
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.className = listening ? 'voice-btn listening' : 'voice-btn';
+                button.textContent = listening ? '🔴' : '🎤';
+                button.title = listening ? 'Stop Voice Input' : 'Voice Input';
+            }
+        }
+        
+        // Initialize speech recognition on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initSpeechRecognition();
+        });
     </script>
 </body>
 </html>
